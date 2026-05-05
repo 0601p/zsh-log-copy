@@ -4,6 +4,14 @@
 
 ## Install
 
+One-line install:
+
+```zsh
+curl -fsSL https://raw.githubusercontent.com/0601p/zsh-log-copy/main/install.sh | sh
+```
+
+The installer clones this repository to `~/.zsh-log-copy` and adds this plugin to your `.zshrc`. Restart your shell after installing, or run `source ~/.zshrc`.
+
 Source the plugin from your `.zshrc`:
 
 ```zsh
