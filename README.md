@@ -106,8 +106,10 @@ source /path/to/zsh-log-copy/zsh-log-copy.plugin.zsh
 `copylast` tries these clipboard commands in order:
 
 ```text
-pbcopy, wl-copy, xclip, xsel, clip.exe
+pbcopy, wl-copy, xclip, xsel, clip.exe, OSC 52
 ```
+
+OSC 52 is the fallback for SSH sessions where the remote server has no local clipboard command. It asks your local terminal to copy the text. Your terminal must allow OSC 52 clipboard access; tmux may also need passthrough enabled.
 
 ## Notes
 

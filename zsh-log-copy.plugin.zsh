@@ -571,9 +571,34 @@ __zlc_clipboard_copy() {
     command xsel --clipboard --input < "$file"
   elif (( $+commands[clip.exe] )); then
     command clip.exe < "$file"
+  elif __zlc_clipboard_copy_osc52 "$file"; then
+    return 0
   else
-    print -u2 "copylast: no clipboard command found (tried pbcopy, wl-copy, xclip, xsel, clip.exe)"
+    print -u2 "copylast: no clipboard command found (tried pbcopy, wl-copy, xclip, xsel, clip.exe, OSC 52)"
     return 127
+  fi
+}
+
+__zlc_clipboard_copy_osc52() {
+  emulate -L zsh
+
+  local file="$1"
+  local encoded sequence
+
+  [[ -r "$file" ]] || return 1
+  [[ -w /dev/tty ]] || return 1
+  (( $+commands[base64] )) || return 1
+
+  encoded="$(command base64 < "$file" 2>/dev/null | command tr -d '\r\n')" || return 1
+  [[ -n "$encoded" ]] || return 1
+
+  sequence=$'\e]52;c;'"$encoded"$'\a'
+
+  if [[ -n ${TMUX:-} ]]; then
+    # tmux requires wrapping OSC sequences for passthrough.
+    printf '\033Ptmux;\033%s\033\\' "$sequence" > /dev/tty
+  else
+    printf '%s' "$sequence" > /dev/tty
   fi
 }
 
