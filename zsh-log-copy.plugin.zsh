@@ -19,6 +19,7 @@ typeset -g __ZSH_LOG_COPY_LOADED=1
 typeset -g ZSH_LOG_COPY_SESSION_ID="${ZSH_LOG_COPY_SESSION_ID:-${HOST:-host}.$$}"
 typeset -g ZSH_LOG_COPY_SESSION_DIR="${ZSH_LOG_COPY_SESSION_DIR:-${ZSH_LOG_COPY_BASE_DIR}/${ZSH_LOG_COPY_SESSION_ID}}"
 typeset -g ZSH_LOG_COPY_LAST_LOG="${ZSH_LOG_COPY_LAST_LOG:-${ZSH_LOG_COPY_SESSION_DIR}/last.log}"
+typeset -g ZSH_LOG_COPY_SANITIZED_LOG="${ZSH_LOG_COPY_SANITIZED_LOG:-${ZSH_LOG_COPY_SESSION_DIR}/last.sanitized.log}"
 typeset -g ZSH_LOG_COPY_LAST_COMMAND="${ZSH_LOG_COPY_LAST_COMMAND:-}"
 typeset -g ZSH_LOG_COPY_LAST_STATUS="${ZSH_LOG_COPY_LAST_STATUS:-}"
 
@@ -602,8 +603,50 @@ __zlc_clipboard_copy_osc52() {
   fi
 }
 
+__zlc_sanitize_log() {
+  emulate -L zsh
+
+  local input="$1"
+  local output="$2"
+
+  [[ -r "$input" ]] || return 1
+
+  if (( $+commands[perl] )); then
+    command perl -0pe '
+      s/\e\][^\a]*(?:\a|\e\\)//gs;
+      s/\e[PX^_].*?\e\\//gs;
+      s/\e\[[0-?]*[ -\/]*[@-~]//g;
+      s/\e[@-_]//g;
+    ' < "$input" >| "$output"
+  elif (( $+commands[python3] )); then
+    command python3 -c '
+import re
+import sys
+data = sys.stdin.buffer.read().decode("utf-8", "replace")
+data = re.sub(r"\x1b\][^\x07]*(?:\x07|\x1b\\)", "", data, flags=re.S)
+data = re.sub(r"\x1b[PX^_].*?\x1b\\", "", data, flags=re.S)
+data = re.sub(r"\x1b\[[0-?]*[ -/]*[@-~]", "", data)
+data = re.sub(r"\x1b[@-_]", "", data)
+sys.stdout.write(data)
+' < "$input" >| "$output"
+  else
+    command cp "$input" "$output"
+  fi
+}
+
+__zlc_copy_source_log() {
+  emulate -L zsh
+
+  [[ -f "$ZSH_LOG_COPY_LAST_LOG" ]] || return 1
+  command mkdir -p -- "$ZSH_LOG_COPY_SESSION_DIR" 2>/dev/null || return 1
+  __zlc_sanitize_log "$ZSH_LOG_COPY_LAST_LOG" "$ZSH_LOG_COPY_SANITIZED_LOG" || return 1
+  print -r -- "$ZSH_LOG_COPY_SANITIZED_LOG"
+}
+
 copylast() {
   emulate -L zsh
+
+  local copy_source
 
   case "${1:-}" in
     -h|--help)
@@ -612,8 +655,12 @@ copylast() {
       return 0
       ;;
     -p|--print)
-      if [[ -f "$ZSH_LOG_COPY_LAST_LOG" ]]; then
-        command cat -- "$ZSH_LOG_COPY_LAST_LOG"
+      copy_source="$(__zlc_copy_source_log)" || {
+        print -u2 "copylast: no captured output in this zsh session"
+        return 1
+      }
+      if [[ -f "$copy_source" ]]; then
+        command cat -- "$copy_source"
         return $?
       fi
       print -u2 "copylast: no captured output in this zsh session"
@@ -637,10 +684,17 @@ copylast() {
     return 1
   fi
 
-  __zlc_clipboard_copy "$ZSH_LOG_COPY_LAST_LOG" || return $?
+  copy_source="$(__zlc_copy_source_log)" || return $?
+
+  if [[ ! -s "$copy_source" ]]; then
+    print -u2 "copylast: no captured output in this zsh session"
+    return 1
+  fi
+
+  __zlc_clipboard_copy "$copy_source" || return $?
 
   local bytes
-  bytes="$(command wc -c < "$ZSH_LOG_COPY_LAST_LOG" 2>/dev/null)"
+  bytes="$(command wc -c < "$copy_source" 2>/dev/null)"
   bytes="${bytes//[[:space:]]/}"
 
   print -r -- "copylast: copied ${bytes:-0} bytes"

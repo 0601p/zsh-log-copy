@@ -113,4 +113,4 @@ OSC 52 is the fallback for SSH sessions where the remote server has no local cli
 
 ## Notes
 
-The plugin captures both stdout and stderr. It uses zsh `preexec` and `precmd` hooks plus `tee`, so commands that check whether stdout or stderr is a real TTY may format output differently while they are being captured. stdout and stderr are captured through separate streams, so their relative order in `last.log` can differ for commands that write to both at nearly the same time.
+The plugin captures both stdout and stderr. `copylast`/`cpl` strips terminal escape sequences from copied or printed output, including shell integration markers such as VS Code/Cursor OSC 633. It uses zsh `preexec` and `precmd` hooks plus `tee`, so commands that check whether stdout or stderr is a real TTY may format output differently while they are being captured. stdout and stderr are captured through separate streams, so their relative order in `last.log` can differ for commands that write to both at nearly the same time.
